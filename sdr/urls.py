@@ -16,6 +16,7 @@ urlpatterns = [
     path("transmission/<int:transmission_id>/", sdr.views.transmission, name="sdr_transmission"),
     path("transmission/<int:transmission_id>/data/", sdr.views.transmission_data, name="sdr_transmission_data"),
     path("transmissions/", sdr.views.transmissions, name="sdr_transmissions"),
+    path("transmissions/feed/", sdr.views.transmissions_feed, name="sdr_transmissions_feed"),
     path("gain_tester/", sdr.views.gain_tester, name="sdr_gain_tester"),
     path("gain_tests/", sdr.views.gain_tests, name="sdr_gain_tests"),
     path("gain_test/<int:gain_test_id>/", sdr.views.gain_test, name="sdr_gain_test"),

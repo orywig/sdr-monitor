@@ -9,6 +9,8 @@ from django.db.models.functions import TruncSecond, TruncDate, Length
 from django.http import Http404
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
+from django.urls import reverse
+from django.utils import timezone
 from django.utils.timezone import localtime
 from sdr.app_settings import *
 from sdr.models import *
@@ -169,6 +171,64 @@ def transmission_data(request, transmission_id):
         filename = get_download_filename("transmission", t.id, "wav", t.begin_date)
         sdr.signals.decode_audio(t.data_file.path, filename, t.group.modulation, sample_rate)
         return file_response(filename)
+
+
+# live listen: a transmission is only exposed to the feed once no new chunk has arrived
+# for this long (chunks within 1s extend end_date - see transmission_reader.py), so we
+# never hand the player a still-growing recording.
+TRANSMISSIONS_FEED_COMPLETION_GUARD_SECONDS = 2
+TRANSMISSIONS_FEED_LIMIT = 25
+
+
+@login_required()
+@permission_required("sdr.view_transmission", raise_exception=True)
+def transmissions_feed(request):
+    if AppSettings.get(AppSettingsKey.GAIN_TESTER_DATA_ENABLED):
+        items = Transmission.objects
+    else:
+        items = Transmission.objects.exclude(source="gain tester")
+    items = (
+        items.select_related("device")
+        .select_related("group")
+        .annotate(
+            device_name=F("device__name"),
+            group_name=F("group__name"),
+            modulation=F("group__modulation"),
+            datetime=F("begin_date"),
+            duration=TruncSecond("end_date") - TruncSecond("begin_date"),
+            frequency=F("begin_frequency") + (F("end_frequency") - F("begin_frequency")) / 2,
+            class_name=F("audio_class__name"),
+            class_subname=F("audio_class__subname"),
+        )
+    )
+    completed_before = timezone.now() - timezone.timedelta(seconds=TRANSMISSIONS_FEED_COMPLETION_GUARD_SECONDS)
+    items = items.filter(group__data_type="audio", end_date__lte=completed_before)
+    items = common.utils.filters.filter(request, items)
+    try:
+        after = int(request.GET.get("after", "0"))
+    except (TypeError, ValueError):
+        after = 0
+    if after > 0:
+        items = items.filter(id__gt=after)
+    # newest first so the client can seed its cursor from the true latest id even when
+    # the result is capped; the client sorts each batch ascending for chronological play
+    items = items.order_by("-id")[:TRANSMISSIONS_FEED_LIMIT]
+
+    transmissions = [
+        {
+            "id": t.id,
+            "data_url": reverse("sdr_transmission_data", args=[t.id]),
+            "device_name": t.device_name,
+            "group_name": t.group_name,
+            "modulation": t.modulation,
+            "frequency": int(t.frequency),
+            "begin_date": localtime(t.begin_date).isoformat(),
+            "duration_seconds": round(t.duration.total_seconds()) if t.duration else 0,
+            "class_name": t.class_name,
+        }
+        for t in items
+    ]
+    return JsonResponse({"transmissions": transmissions})
 
 
 @staff_member_required()
