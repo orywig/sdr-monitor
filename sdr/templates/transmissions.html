@@ -1,10 +1,28 @@
 {% extends "generic/section_big.html" %}
 {% load i18n %}
 {% load sdr_filters %}
+{% load static %}
 
 {% block section_title %}{% trans "TRANSMISSIONS" %}: {{items.paginator.count}}{% endblock %}
 
+{% block main_scripts %}
+<script src="{% static 'js/live_listen.js' %}"></script>
+{% endblock %}
+
 {% block section_content %}
+<div id="live-listen" class="row mt-2" data-feed-url="{% url 'sdr_transmissions_feed' %}">
+    <div class="col-12">
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <button id="live-listen-toggle" type="button" class="btn btn-outline-danger">○ {% trans "Live" %}: OFF</button>
+            <button id="live-listen-pause" type="button" class="btn btn-outline-secondary">{% trans "Pause" %}</button>
+            <button id="live-listen-skip" type="button" class="btn btn-outline-secondary">{% trans "Skip" %}</button>
+            <span id="live-listen-status" class="ms-2 fw-bold"></span>
+            <span id="live-listen-queue" class="text-muted"></span>
+            <audio id="live-listen-audio" preload="none" style="display: none;"></audio>
+        </div>
+        <small class="text-muted">{% trans "Auto-plays new FM/AM transmissions as they complete, using the filters below." %}</small>
+    </div>
+</div>
 <div class="row mt-2">
     <div class="col-12">
         <div class="table-responsive">
